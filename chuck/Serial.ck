@@ -1,4 +1,4 @@
-public class SerialGrab {
+public class RouletteSerial {
     // open cereal device
     SerialIO cereal;
     
@@ -8,7 +8,30 @@ public class SerialGrab {
     int data[3];
     3 => int digits;
     
-    Event serialNotify; 
+    Event serialNotify;
+    
+    int partType;
+    int moduleNum;
+    int value;
+    
+    int seq[16][5];
+    int buttonMomentaryState[16];
+    int settings[16];
+    Event buttonPressed;
+    
+    int encoder[2];
+    100 => int encoderTempo;
+    int encoderSelect;
+    1 => int encoderSelectP;
+    Event drumChange;
+    int encoderState;
+    int encoderStateP;
+    [[255,0],[0,255],[10,255],[55,200]] @=> int encoderColor[][];
+    
+    3 => int numDrums;
+    40 => int minTempo;
+    200 => int maxTempo;
+    
     
     fun void setup(int dev){
         // list cereal devices
@@ -46,16 +69,20 @@ public class SerialGrab {
         }
         // pause to let cereal device finish opening
         2::second => now;
-        
-    }    
-    fun void cerealSend(int a, int b, int c){
+        spork~ poller();
+        spork~ tempoMonitorBlink();
+        colorUpdate();
+        0 => encoderSelectP;
+    } 
+    
+    fun void send(int a, int b, int c){
         [255, a, b, c] @=> bytes;
         // write to cereal device
         cereal.writeBytes(bytes);
     }
     
     
-    fun void cerealPoller(){
+    fun void poller(){
         while(true){
             // Grab Serial data
             cereal.onLine()=>now;
@@ -94,108 +121,167 @@ public class SerialGrab {
     fun int[] dataBang(){
         return data;
     }
-}
-
-
-class Timer{
     
-    time timerStart;
-    time timerEnd;
-    1::second => dur interval;
-    0 => int startBool;
-    
-    fun void start(){
-        if(startBool == 0){
-            now => timerStart;
-            timerStart + interval => timerEnd;
-            1 => startBool;
+    //Main loop to be sporked by parent
+    fun void loop(){
+        while(true){
+            //Wait for a serial notify event
+            serialNotify => now;
+            //Grab all the data and put it in local array
+            dataBang() @=> data;
+            
+            sort();
+            // If 0, it is a pot for probability
+            if(partType == 0) updatePot();
+            // If 2, its X
+            else if(partType == 2) updateX();
+            //If 3, its a button
+            else if(partType == 3) updateButton();
+            //If 4, its the encoder
+            else if(partType == 4) updateEncoder();   
+            else updateY();
+            
         }
     }
-    fun void setInterval(float a){
-        a::ms => interval;
-        timerStart + interval => timerEnd;
-    }
     
-    fun int done(){
-        <<<timerEnd, " ", now>>>;
-        if(timerEnd <= now)return 1;
-        else return 0;
-    }
-    
-    fun void reset(){
-        0 => startBool;
+    //Overloaded for debug options
+    fun void loop(int a){
+        while(true){
+            //Wait for a serial notify event
+            serialNotify => now;
+            //Grab all the data and put it in local array
+            dataBang() @=> data;
+            
+            sort();
+            // If 0, it is a pot for probability
+            if(partType == 0) updatePot();
+            // If 2, its X
+            else if(partType == 2) updateX();
+            //If 3, its a button
+            else if(partType == 3) updateButton();
+            //If 4, its the encoder
+            else if(partType == 4) updateEncoder();   
+            else updateY();
+            debug(a);
         }
+    }
+    
+    //Scales pot values to run clockwise and be a number between 0 and 12
+    fun void updatePot(){
+        Std.clamp(Std.scalef(value$float,0,127,13,0)$int,0,12) => seq[moduleNum][partType];
+    }
+    fun void updateButton(){
+        if(moduleNum < 16){
+            //Tell if button is being held or not for updateY
+            value => buttonMomentaryState[moduleNum];
+            //Update settings for hit function of Drum Class
+            if(value == 1){
+                !settings[moduleNum] => settings[moduleNum];
+                buttonPressed.signal();
+            }
+        }
+        if(moduleNum == 16 && value == 1){
+            //<<<"yo ", encoderState >>>;
+            !encoderState => encoderState;
+        }
+    }
+    fun void updateX(){
+        //If 2, its X of joystick for slugging
+        Std.clamp(Std.scalef(value$float,21,105,0,10)$int,0,9) => seq[moduleNum][3];
+    }
+    
+    fun void updateY(){
+        //Make sure the button is not the encoder button before moving on
+        if(moduleNum < 16){
+            // If button NOT being held and using Y, its the joystick, so set it for the HIGH vol 
+            if(buttonMomentaryState[moduleNum] == 0 && partType == 1) Std.clamp(Std.scalef(value$float,20,110,100,20)$int,25,90) => seq[moduleNum][partType];
+            // If button IS being held and using Y, its the joystick, so set it for the LOW vol 
+            else if(buttonMomentaryState[moduleNum] == 1 && partType == 1) Std.clamp(Std.scalef(value$float,20,100,110,20)$int,25,90) => seq[moduleNum][2];    
+        }
+    }
+    
+    fun void updateEncoder(){
+        //If moduleNum == 0, assign it to represent the drum picker
+        if(moduleNum == 0){
+            Std.clamp(Std.scalef(value$float,0,255,0,numDrums)$int,0,numDrums - 1) => encoderSelect => encoder[0];
+            colorUpdate();
+            encoder[0] => encoderSelectP;
+        }
+        //If moduleNum == 1, assign it to Tempo
+        if(moduleNum == 1){
+            Std.clamp(Std.scalef(value$float,0,255,minTempo,maxTempo+2)$int,minTempo,maxTempo) => encoderTempo => encoder[1];
+        }
+        moduleNum => encoderState;
+    }
+    
+    //Debug tool to know if data is being collected properly
+    fun void debug(int a){
+        if(a == 0)  <<< partType, moduleNum, value>>>;
+        
+        if(a == 1 || a == 2){
+            for(0 => int i; i < 16; i++){
+                if(a == 1)<<<"Seq ",i, ":", seq[i][0], seq[i][1], seq[i][2], seq[i][3]>>>;
+                //Button Status
+                else if(a == 2)<<<"Settings ",i, ":", settings[i]>>>;
+                else break;
+            }
+        }
+        if(a == 3)for(0 => int i; i < 2; i++)<<<"Encoder ",i, ":", encoder[i]>>>;
+        
+    }
+    
+    fun void sort(){
+        //Organize data so it is easier to understand it's parts
+        data[0] => partType;
+        data[1] => moduleNum;
+        //Most of the circuits are rigged backwards
+        //So you will see a lot of scaling to flip the data around
+        //Right here I am flipping so that the moduleNum rotates clockwise
+        if(moduleNum < 16 && partType != 4) Std.scalef(moduleNum$float,0,15,15,0)$int => moduleNum;
+        data[2] => value;
+    }
+    
+    
+    fun void colorUpdate(){
+        if(encoderSelect != encoderSelectP){
+            send(2,0,encoderColor[encoderSelect][0]);
+            send(2,1,encoderColor[encoderSelect][1]);
+            drumChange.signal();
+        }
+    }
+    
+    fun void tempoMonitorBlink(){
+        float beat;
+        while(true){  
+            //Quick bpm math
+            60000/encoderTempo => beat;
+            
+            //If the encoder is in tempo mode make it blink
+            if(encoderState == 1){
+                //Send R/G 0
+                send(2,0,0);
+                send(2,1,0);
+                //Blink at a rate related to the tempo
+                beat*.7::ms => now;
+                //Send R/G values according to drum setting
+                send(2,0,encoderColor[encoderSelect][0]);
+                send(2,1,encoderColor[encoderSelect][1]);
+            }
+            //On transition from blinking to not blinking, reset the color 
+            //this ensures the encoder is always on
+            if(encoderState != encoderStateP){
+                send(2,0,encoderColor[encoderSelect][0]);
+                send(2,1,encoderColor[encoderSelect][1]);
+            }
+            encoderState => encoderStateP; 
+            beat*.3::ms => now;
+        }
+    }
 }
 
-SerialGrab serial;
-int data[3];
-int partType;
-int moduleNum;
-int value;
-int seq[16][5];
+//RouletteSerial serial;
+//serial.setup(3);
 
-Event button;
-Timer buttonTimer[16];
+//spork~ serial.loop(3);
 
-int blinkBool;
-Shred s;
-
-serial.setup(3);
-spork~ serial.cerealPoller();
-
-while(true){
-    
-    //Wait for a serial notify event
-    serial.serialNotify => now;
-    //Grab all the data and put it in local array
-    serial.dataBang() @=> data;
-    
-    //Organize data so it is easier to understand it's parts
-    data[0] => partType;
-    data[1] => moduleNum;
-    data[2] => value;
-    
-    // If 0, it is a pot for probability
-    if(partType == 0) Std.clamp(Std.scalef(value$float,0,127,13,0)$int,0,12) => seq[moduleNum][partType];
-    // If 2, its X of joystick for slugging
-    else if(partType == 2) Std.clamp(Std.scalef(value$float,21,105,0,11)$int,0,10) => seq[moduleNum][3];
-    else if(partType == 3)
-    { 
-        value => seq[moduleNum][4];
-        button.broadcast();
-    }
-    
-    // If button NOT being held and using Y, its the joystick, so set it for the HIGH vol 
-    if(seq[moduleNum][4] == 0 && partType == 1) Std.clamp(Std.scalef(value$float,20,110,110,0)$int,0,100) => seq[moduleNum][partType];
-    // If button IS being held and using Y, its the joystick, so set it for the LOW vol 
-    else if(seq[moduleNum][4] == 1 && partType == 1) Std.clamp(Std.scalef(value$float,20,110,110,0)$int,0,100) => seq[moduleNum][2]; 
-    
-    if(seq[moduleNum][4] == 0){
-        0 => blinkBool;
-        buttonTimer[moduleNum].reset();
-        Machine.remove( s.id() );
-    }
-    
-    else if (seq[moduleNum][4] == 1){
-        buttonTimer[moduleNum].start();
-    }
-    
-    if(blinkBool == 0 && buttonTimer[moduleNum].done() == 1){
-        1 => blinkBool;
-        spork~ blink(moduleNum) @=> s;
-    }  
-    
-    for(0 => int i; i < 16; i++){
-        //<<<"Seq ",i, ":", seq[i][0], seq[i][1], seq[i][2], seq[i][3]>>>;
-    }
-}
-
-fun void blink(int a){
-    while(true){
-        serial.cerealSend(0,a,1);
-        100::ms => now;
-        serial.cerealSend(0,a,0);
-        100::ms => now;
-    }
-}
-
+//while(true)1::second=>now;
