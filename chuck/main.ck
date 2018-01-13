@@ -14,7 +14,7 @@ int currentDrum;
 bpm.measure();
 
 
-serial.setup(3);
+serial.setup(2);
 spork~ serial.loop(0);
 
 kick.inst => dac;

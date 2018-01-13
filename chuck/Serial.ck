@@ -200,10 +200,21 @@ public class RouletteSerial {
         }
     }
     
+    int encoderDrum;
+    
     fun void updateEncoder(){
         //If moduleNum == 0, assign it to represent the drum picker
         if(moduleNum == 0){
-            Std.clamp(Std.scalef(value$float,0,255,0,numDrums)$int,0,numDrums - 1) => encoderSelect => encoder[0];
+            //Use modulo instead so less turning is required
+            //Std.clamp(Std.scalef(value$float,0,255,0,numDrums)$int,0,numDrums - 1) => encoderSelect => encoder[0];
+            
+            if (value % 20 == 0) {
+               
+                encoderDrum++;
+                <<<encoderDrum - 1, value>>>;
+                encoderDrum % numDrums => encoderDrum;
+                encoderSelect => encoder[0];
+            }
             colorUpdate();
             encoder[0] => encoderSelectP;
         }

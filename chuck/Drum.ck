@@ -1,4 +1,5 @@
 public class Drum {
+    Preset preset;
     BPM bpm;
     
     80 => bpm.tempo;
@@ -8,11 +9,11 @@ public class Drum {
     string name;
     // send object
     OscOut osc;
-    osc.dest("localhost", 12001);
+    osc.dest("localhost", 54322);
     // create our OSC receiver
     OscIn oin;
     OscMsg msg;
-    12000 => oin.port;
+    54321 => oin.port;
     
     Event determiner;
     SndBuf inst;
@@ -23,7 +24,10 @@ public class Drum {
     float instGain;
     0 => int launch;
     
-    spork~ trackClick();
+    spork~ appIn();
+    1 => int playState;
+    int saveState;
+    float offset;
     
     //Play 
     //calculates with determine, then launches  
@@ -34,10 +38,15 @@ public class Drum {
         determineInit();
         while (true){
             
-            //intercept determine settings
-            for(0 => int i; i < seq.size(); i++){
-                stepper(i);
+            if (playState == 1){
+                //intercept determine settings
+                for(0 => int i; i < seq.size(); i++){
+                    stepper(i);
+                    if (playState == 0) break;
+                }
             }
+            //If not playing pass arbitrary time to avoid crashing
+            else 10 :: ms => now;
         }
         
     }
@@ -185,6 +194,7 @@ public class Drum {
         me.dir() + "/audio/" + filename => inst.read;
         inst.samples() => inst.pos;
         _name => name;
+        name => preset.name;
         return <<< "Loaded ", filename  >>>; 
     }
     
@@ -216,10 +226,12 @@ public class Drum {
     //that was sent from ChucK
     
     //ie. Flip the type of hit event for a certain step
-    fun void trackClick(){
+    fun void appIn(){
         // infinite event loop
         // create an address in the receiver
-        oin.addAddress( "/"+ name + "/change, i i" );
+        oin.addAddress( "/play, i" );
+        oin.addAddress( "/save, i" );
+        oin.addAddress( "/timeOffset, f" );
         while ( true )
         {
             // wait for event to arrive
@@ -228,12 +240,21 @@ public class Drum {
             // grab the next message from the queue. 
             while ( oin.recv(msg) != 0 )
             { 
-                // getFloat fetches the expected float (as indicated by "f")
-                msg.getInt(1) => settings[msg.getInt(0)][1];
-                // print
-                //Chuck needs to be launched second for it to receive...
-                //<<<msg.getInt(1)>>>;
-                
+                //Play/Pause
+                if(msg.address == "/play"){
+                    <<< "play: ", msg.getInt(0) >>>;
+                    //set playstate
+                    msg.getInt(0) => playState;
+                    //reset launch value for microstepping
+                    if (playState == 0) 0 => launch;
+                }
+                //Preset Saving
+                if(msg.address == "/save"){
+                    //trigger save state
+                    if(msg.getInt(0) == 1) preset.save(seq);
+                }
+                //Offset Percentage
+                if(msg.address == "/timeOffset") msg.getFloat(0) => offset;
             }
         }
     }
