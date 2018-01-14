@@ -1,24 +1,26 @@
 public class Drum {
     Preset preset;
     BPM bpm;
+    OSC osc;
     
     80 => bpm.tempo;
     bpm.measure();
     
     //OSC tools
     string name;
-    // send object
-    OscOut osc;
-    osc.dest("localhost", 54322);
-    // create our OSC receiver
-    OscIn oin;
-    OscMsg msg;
-    54321 => oin.port;
     
     Event determiner;
     SndBuf inst;
     
     int seq[16][4];
+    
+    //seq: [probability, vol low, vol high, time offset]
+    
+    [[1,100,100,4],[0,70,80,4],[0,70,80,4],[0,70,80,4],
+    [0,70,80,4],[0,70,80,4],[0,70,80,4],[0,70,80,4],
+    [0,70,80,4],[0,70,80,4],[0,70,80,4],[0,70,80,4],
+    [0,70,80,4],[0,70,80,4],[0,70,80,4],[0,70,80,4]] @=> seq;
+    
     //[][0] = volume, [][1] = hit boolean
     float settings[16][2];
     float instGain;
@@ -80,7 +82,7 @@ public class Drum {
             //For visual purposes make the clock light
             //slightly early
             if(i == 3){
-                oscOut("/clockOn", stepNumber);
+                osc.oscOut("/clockOn", stepNumber);
             }
             bpm.sth/10 => now;
         }
@@ -94,13 +96,14 @@ public class Drum {
         string value;
         for(0 => int i; i < seq.size(); i++){
             check(i);
+            instGain => settings[i][0];
         }
         //Send a comma separated string as OSC message
         for(0 => int i; i < seq.size(); i++){
             Std.itoa(settings[i][1]$int) +=> value;
             if(i < seq.size()-1) "," +=> value;
         }
-        oscOut("/"+ name + "/hit", value);
+        osc.oscOut("/"+ name + "/hit", value);
         determiner.signal();
         
     }
@@ -109,14 +112,14 @@ public class Drum {
     fun void determine(){
         
         string value;
-        oscOut("/"+ name + "/determine", 1);
+        osc.oscOut("/"+ name + "/determine", 1);
         
         //Send a comma separated string as OSC message
         for(0 => int i; i < seq.size(); i++){
             Std.itoa(settings[i][1]$int) +=> value;
             if(i < seq.size()-1) "," +=> value;
         }
-        oscOut("/"+ name + "/hit", value);
+        osc.oscOut("/"+ name + "/hit", value);
         determiner.signal();
     }
     
@@ -138,7 +141,7 @@ public class Drum {
         stepNumber => value[0];
         settings[stepNumber][1]$int => value[1];
         //Send the value of the step hitting
-        oscOut("/"+ name + "/soloHit", value);
+        osc.oscOut("/"+ name + "/soloHit", value);
         //Allow processing to create a new table of comparison
         //see the KickPing[] array in hitUpdate()
         //oscOut("/"+ name + "/determine", 1);
@@ -198,28 +201,6 @@ public class Drum {
         return <<< "Loaded ", filename  >>>; 
     }
     
-    // osc sending function
-    //overloaded funtions for sending different types of data
-    fun void oscOut(string addr, int val) {
-        osc.start(addr);
-        osc.add(val);
-        osc.send();
-    }
-    
-    fun void oscOut(string addr, int val[]) {
-        osc.start(addr);
-        for(0 => int i; i < val.size(); i++){
-            osc.add(val[i]);
-        }
-        osc.send();
-    }
-    
-    fun void oscOut(string addr, string val) {
-        osc.start(addr);
-        osc.add(val);
-        osc.send();
-    }
-    
     
     //Listens to Processing for changes in the settings[][] array
     // It basically recieves OSC msgs if there is a change in data
@@ -229,32 +210,32 @@ public class Drum {
     fun void appIn(){
         // infinite event loop
         // create an address in the receiver
-        oin.addAddress( "/play, i" );
-        oin.addAddress( "/save, i" );
-        oin.addAddress( "/timeOffset, f" );
+        osc.oin.addAddress( "/play, i" );
+        osc.oin.addAddress( "/save, i" );
+        osc.oin.addAddress( "/timeOffset, f" );
         while ( true )
         {
             // wait for event to arrive
-            oin => now;
+            osc.oin => now;
             
             // grab the next message from the queue. 
-            while ( oin.recv(msg) != 0 )
+            while ( osc.oin.recv(osc.msg) != 0 )
             { 
                 //Play/Pause
-                if(msg.address == "/play"){
-                    <<< "play: ", msg.getInt(0) >>>;
+                if(osc.msg.address == "/play"){
+                    <<< name," play: ", osc.msg.getInt(0) >>>;
                     //set playstate
-                    msg.getInt(0) => playState;
+                    osc.msg.getInt(0) => playState;
                     //reset launch value for microstepping
                     if (playState == 0) 0 => launch;
                 }
                 //Preset Saving
-                if(msg.address == "/save"){
+                if(osc.msg.address == "/save"){
                     //trigger save state
-                    if(msg.getInt(0) == 1) preset.save(seq);
+                    if(osc.msg.getInt(0) == 1) preset.save(seq);
                 }
                 //Offset Percentage
-                if(msg.address == "/timeOffset") msg.getFloat(0) => offset;
+                if(osc.msg.address == "/timeOffset") osc.msg.getFloat(0) => offset;
             }
         }
     }

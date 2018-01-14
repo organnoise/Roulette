@@ -1,15 +1,11 @@
 public class Clock {
     BPM bpm;
+    OSC osc;
     //OSC tools
-    string name;
-    // send object
-    OscOut osc;
-    osc.dest("localhost", 54322);
-    // create our OSC receiver
-    OscIn oin;
-    OscMsg msg;
-    54321 => oin.port;
+    "clock" => string name;
+    
     Event stepChange;
+    Event pause;
     int pStep; 
     int beat;
     
@@ -25,7 +21,11 @@ public class Clock {
                 for(0 => int i; i < 16; i++){
                     stepper(i);
                     i => pStep;
-                    if (playState == 0) break;
+                    if (playState == 0) {
+                        pause.signal();
+                        osc.oscOut("/play", 0);
+                        break;
+                    }
                 }
             }
             //If not playing pass arbitrary time to avoid crashing
@@ -37,6 +37,7 @@ public class Clock {
         //On launch start sequence from middle
         if(launch == 0){
             1 => launch;
+            osc.oscOut("/play", 1);
             step(stepNumber, 4);
         }
         //Otherwise start as a typical for loop would start    
@@ -47,7 +48,7 @@ public class Clock {
     fun void step(int stepNumber, int launchPoint){
         for(launchPoint => int i; i < 10; i ++){
             if(i == 3){
-                oscOut("/clockOn", stepNumber);
+                osc.oscOut("/clockOn", stepNumber);
                 //write info to bytes array for interface
                 if(stepNumber != pStep){
                     stepNumber => beat;
@@ -57,29 +58,28 @@ public class Clock {
             bpm.sth/10 => now;
         }
     }
-    fun void oscOut(string addr, int val) {
-        osc.start(addr);
-        osc.add(val);
-        osc.send();
+    
+    fun int getBeat(){
+        return Std.scalef(beat, 0, 15, 15, 0)$int;
     }
     
     fun void appIn(){
         // infinite event loop
         // create an address in the receiver
-        oin.addAddress( "/play, i" );
+        osc.oin.addAddress( "/play, i" );
         while ( true )
         {
             // wait for event to arrive
-            oin => now;
+            osc.oin => now;
             
             // grab the next message from the queue. 
-            while ( oin.recv(msg) != 0 )
+            while ( osc.oin.recv(osc.msg) != 0 )
             { 
                 //Play/Pause
-                if(msg.address == "/play"){
-                    <<< "play: ", msg.getInt(0) >>>;
+                if(osc.msg.address == "/play"){
+                    <<< name, " play: ", osc.msg.getInt(0) >>>;
                     //set playstate
-                    msg.getInt(0) => playState;
+                    osc.msg.getInt(0) => playState;
                     //reset launch value for microstepping
                     if (playState == 0) 0 => launch;
                 }

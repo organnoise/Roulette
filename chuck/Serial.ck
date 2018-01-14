@@ -27,10 +27,12 @@ public class RouletteSerial {
     int encoderState;
     int encoderStateP;
     [[255,0],[0,255],[10,255],[55,200]] @=> int encoderColor[][];
+    Event tempoChange;
     
     3 => int numDrums;
     40 => int minTempo;
     200 => int maxTempo;
+    
     
     
     fun void setup(int dev){
@@ -71,6 +73,7 @@ public class RouletteSerial {
         2::second => now;
         spork~ poller();
         spork~ tempoMonitorBlink();
+        spork~ encoderPing();
         colorUpdate();
         0 => encoderSelectP;
     } 
@@ -201,27 +204,69 @@ public class RouletteSerial {
     }
     
     int encoderDrum;
+    int encoderCount;
+    int encoderVal[2];
+    int encTimerOn;
+    //Sporked to monitor changes in encoder between 2 and 0
+    fun void encoderPing(){
+        while (true){
+            serialNotify => now;
+            
+            if(partType == 4) {
+                if (moduleNum == 0){
+                    if (encTimerOn == 0) spork~ encoderTimer(1);
+                    
+                    value => encoderVal[0];
+                    
+                    if (value == 2){ 
+                        if (encoderVal[0] != encoderVal[1]) 0 => encoderCount;
+                        encoderCount++;
+                    }
+                    if (value == 1) {
+                        if (encoderVal[0] != encoderVal[1]) 0 => encoderCount;
+                        encoderCount--;
+                    }
+                    value => encoderVal[1];
+                }
+                else if (moduleNum == 1) {
+                    //If moduleNum == 1, assign it to Tempo
+                    Std.clamp(Std.scalef(value$float,0,255,minTempo,maxTempo+2)$int,minTempo,maxTempo) => encoderTempo => encoder[1];
+                    tempoChange.signal();
+                }
+            }
+            //<<<"Encoder Counter: ", Std.abs(encoderCount)>>>;
+        }
+    }
     
+    fun void encoderTimer(int timer) {
+        1 => encTimerOn;
+        timer::second => now;
+        <<<"Encoder timer reset">>>;
+        0 => encoderCount;
+        0 => encTimerOn;
+    }
+    
+    5 => int turnCount;
     fun void updateEncoder(){
         //If moduleNum == 0, assign it to represent the drum picker
         if(moduleNum == 0){
-            //Use modulo instead so less turning is required
-            //Std.clamp(Std.scalef(value$float,0,255,0,numDrums)$int,0,numDrums - 1) => encoderSelect => encoder[0];
-            
-            if (value % 20 == 0) {
-               
-                encoderDrum++;
-                <<<encoderDrum - 1, value>>>;
+            //If encoder turned enough, change drum
+            if (Std.abs(encoderCount) % turnCount == turnCount - 1) {
+                
+                if (value == 2) encoderDrum++;
+                else if (value == 1) encoderDrum--;
+                
+                //Wrap if number is going backwards
+                if(encoderDrum < 0) numDrums - 1 => encoderDrum;
+                
                 encoderDrum % numDrums => encoderDrum;
-                encoderSelect => encoder[0];
+                Std.abs(encoderDrum) => encoderSelect => encoder[0];
+                <<<"Drum Change: ", encoderDrum >>>;
             }
             colorUpdate();
             encoder[0] => encoderSelectP;
         }
-        //If moduleNum == 1, assign it to Tempo
-        if(moduleNum == 1){
-            Std.clamp(Std.scalef(value$float,0,255,minTempo,maxTempo+2)$int,minTempo,maxTempo) => encoderTempo => encoder[1];
-        }
+        
         moduleNum => encoderState;
     }
     

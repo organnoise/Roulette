@@ -1,5 +1,8 @@
 BPM bpm;
 Clock clock;
+OSC osc;
+
+
 
 RouletteSerial serial;
 
@@ -46,35 +49,50 @@ hihat.load("hihat","/HipHop/HIP_Hat_4.wav");
 
 spork~ setButtonStateInit();
 
+
+
+spork~ clockCheck();
+spork~ pauseCheck();
+spork~ setButtonState();
+spork~ getButtonState();
+spork~ drumChange();
+spork~ tempoChange();
+
 spork~ clock.play();
 spork~ kick.play(0.5);
 spork~ snare.play(0.8);
 spork~ hihat.play(0.08);
 
-spork~ clockCheck();
-spork~ setButtonState();
-spork~ getButtonState();
-spork~ drumChange();
+spork~ appIn();
 
 
 while(true){
-    serial.encoderTempo => bpm.tempo;
     bpm.measure();
     drum[currentDrum].seq @=> serial.seq;
     10::ms => now;
 }
 
+
 fun void clockCheck(){
     while(true){
         clock.stepChange => now;
         
-        
-        Std.scalef(clock.beat, 0, 15, 15, 0)$int => int beat;
+        clock.getBeat() => int beat;
         serial.send(1,beat,1);
         if(beat + 1 <= 15)serial.send(1,beat +1, 0);
         else serial.send(1,0,0);
+        
         //<<<"change ", clock.beat, " , ", beat >>>;
     }
+}
+
+fun void pauseCheck(){
+    while(true){
+        clock.pause => now;
+        serial.send(1,clock.getBeat(),0);
+        //<<<"off lights at ", clock.getBeat()>>>;
+    }
+    
 }
 
 fun void setButtonStateInit(){
@@ -111,12 +129,42 @@ fun void getButtonState(){
 
 fun void drumChange(){
     while(true){
-     serial.drumChange => now;
-     
-     serial.encoderSelect => currentDrum;
-     <<<currentDrum>>>;
-     for(0 => int i; i < 16; i++){
-         serial.send(0,i,drum[currentDrum].settings[i][1]$int);
-     }    
+        serial.drumChange => now;
+        
+        serial.encoderSelect => currentDrum;
+        <<<drum[currentDrum].name>>>;
+        osc.oscOut("/drum", drum[currentDrum].name);
+        for(0 => int i; i < 16; i++){
+            serial.send(0,i,drum[currentDrum].settings[i][1]$int);
+        }    
+    }
+}
+
+fun void tempoChange(){
+    while(true){
+        serial.tempoChange => now;
+        serial.encoderTempo => bpm.tempo;
+    }
+}
+
+fun void appIn(){
+    // infinite event loop
+    // create an address in the receiver
+    osc.oin.addAddress( "/tempo, i" );
+    while ( true )
+    {
+        // wait for event to arrive
+        osc.oin => now;
+        
+        // grab the next message from the queue. 
+        while ( osc.oin.recv(osc.msg) != 0 )
+        { 
+            //Play/Pause
+            if(osc.msg.address == "/tempo"){
+                <<< "OSC tempo: ", osc.msg.getInt(0) >>>;
+                Std.clamp(osc.msg.getInt(0), 1, 200) => bpm.tempo => serial.encoderTempo;
+                bpm.measure();
+            }
+        }
     }
 }
