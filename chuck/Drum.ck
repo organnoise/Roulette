@@ -14,9 +14,11 @@ public class Drum {
     
     int seq[16][4];
     
+    float offsetPercent;
+    
     //seq: [probability, vol low, vol high, time offset]
     
-    [[1,100,100,4],[0,70,80,4],[0,70,80,4],[0,70,80,4],
+    [[0,100,100,4],[0,70,80,4],[0,70,80,4],[0,70,80,4],
     [0,70,80,4],[0,70,80,4],[0,70,80,4],[0,70,80,4],
     [0,70,80,4],[0,70,80,4],[0,70,80,4],[0,70,80,4],
     [0,70,80,4],[0,70,80,4],[0,70,80,4],[0,70,80,4]] @=> seq;
@@ -72,6 +74,8 @@ public class Drum {
         
         seq[stepNumber][3] => float hitPoint;
         
+        bpm.sth/2 * offset => now;
+        
         //"launch point" is used as a strange solution to allow the 
         // time displacement effect
         for(launchPoint => int i; i < 10; i ++){
@@ -82,7 +86,7 @@ public class Drum {
             //For visual purposes make the clock light
             //slightly early
             if(i == 3){
-                osc.oscOut("/clockOn", stepNumber);
+                //osc.oscOut("/clockOn", stepNumber);
             }
             bpm.sth/10 => now;
         }
@@ -133,6 +137,7 @@ public class Drum {
         if(settings[stepNumber][1] == 1){ 
             //<<<"HIT">>>;
             settings[stepNumber][0] => inst.gain;
+            //<<<name, " ", stepNumber, " ", inst.gain() >>>;
             0 => inst.pos;
         }
         // <<<"CHECK AGAIN ", stepNumber>>>;
@@ -232,7 +237,10 @@ public class Drum {
                 //Preset Saving
                 if(osc.msg.address == "/save"){
                     //trigger save state
-                    if(osc.msg.getInt(0) == 1) preset.save(seq);
+                    if(osc.msg.getInt(0) == 1) {
+                        preset.save(seq);
+                        <<<"Preset saved to: ", name >>>;
+                    }
                 }
                 //Offset Percentage
                 if(osc.msg.address == "/timeOffset") osc.msg.getFloat(0) => offset;

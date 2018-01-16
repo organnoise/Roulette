@@ -28,27 +28,7 @@ kick.load("kick","/HipHop/HIP_kick_9.wav");
 snare.load("snare","/HipHop/HIP_Snare_8.wav");
 hihat.load("hihat","/HipHop/HIP_Hat_4.wav");
 
-//[[12,20,50,4],[0,70,80,4],[3,70,90,4],[2,70,100,6],
-//[0,40,60,2],[0,70,80,4],[0,70,90,5],[0,70,100,5],
-//[12,60,70,5],[0,70,80,4],[0,70,90,5],[0,70,100,6],
-//[0,40,60,7],[0,70,80,4],[1,70,90,4],[4,70,100,6]] @=> kick.seq;
-
-//kick.seq @=> serial.seq;
-
-//[[0,20,50,4],[4,70,80,4],[3,70,90,4],[1,50,70,6],
-//[12,40,60,2],[0,70,80,4],[0,70,90,5],[0,70,100,5],
-//[0,60,70,5],[0,70,80,4],[2,70,90,5],[0,70,100,6],
-//[12,40,60,7],[0,70,80,4],[0,70,90,5],[0,70,100,6]] @=> snare.seq;
-
-//[[12,20,50,4],[0,70,80,4],[3,70,90,4],[1,70,100,6],
-//[12,40,60,4],[0,70,80,4],[3,70,90,4],[0,70,100,4],
-//[12,60,70,4],[0,70,80,4],[1,70,90,5],[0,70,100,6],
-//[12,40,60,4],[0,70,80,4],[4,70,90,4],[1,70,100,5]] @=> hihat.seq;
-
-
-
 spork~ setButtonStateInit();
-
 
 
 spork~ clockCheck();
@@ -64,7 +44,7 @@ spork~ snare.play(0.8);
 spork~ hihat.play(0.08);
 
 spork~ appIn();
-
+spork~ dataOut();
 
 while(true){
     bpm.measure();
@@ -72,6 +52,18 @@ while(true){
     10::ms => now;
 }
 
+fun void dataOut(){
+    while(true){
+        serial.serialNotify => now;
+        
+        if(serial.partType!= 4) {
+            osc.oscOut("/modNum", serial.moduleNum);
+            osc.oscOut("/prob", drum[currentDrum].seq[serial.moduleNum][0]);
+            osc.oscOut("/timeOffset", drum[currentDrum].seq[serial.moduleNum][3]);
+        }
+                
+        }
+    }
 
 fun void clockCheck(){
     while(true){
@@ -123,7 +115,7 @@ fun void getButtonState(){
         serial.moduleNum => int moduleNum;
         drum[currentDrum].settings[moduleNum][1]$int=> int flip;
         !flip => drum[currentDrum].settings[moduleNum][1];
-        //<<<"button pressed", serial.moduleNum, kick.settings[moduleNum][1]$int, flip>>>;    
+        <<<"button pressed", serial.moduleNum, drum[currentDrum].settings[moduleNum][1]$int, flip>>>;    
     }    
 }
 

@@ -1,0 +1,4 @@
+#! /bin/bash
+echo "Starting Roulette..."
+
+chuck --caution-to-the-wind BPM.ck Osc.ck Clock.ck Serial.ck Preset.ck Drum.ck  main.ck

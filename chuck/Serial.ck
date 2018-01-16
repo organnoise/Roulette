@@ -33,6 +33,12 @@ public class RouletteSerial {
     40 => int minTempo;
     200 => int maxTempo;
     
+    int encoderDrum;
+    int encoderCount;
+    int encoderVal[2];
+    int encTimerOn;
+    6 => int turnCount;
+    
     
     
     fun void setup(int dev){
@@ -73,7 +79,7 @@ public class RouletteSerial {
         2::second => now;
         spork~ poller();
         spork~ tempoMonitorBlink();
-        spork~ encoderPing();
+        //spork~ encoderPing();
         colorUpdate();
         0 => encoderSelectP;
     } 
@@ -130,10 +136,12 @@ public class RouletteSerial {
         while(true){
             //Wait for a serial notify event
             serialNotify => now;
+            <<< data[0], data[1], data[2]>>>;
             //Grab all the data and put it in local array
             dataBang() @=> data;
             
             sort();
+            encoderPing();
             // If 0, it is a pot for probability
             if(partType == 0) updatePot();
             // If 2, its X
@@ -156,6 +164,7 @@ public class RouletteSerial {
             dataBang() @=> data;
             
             sort();
+            encoderPing();
             // If 0, it is a pot for probability
             if(partType == 0) updatePot();
             // If 2, its X
@@ -180,7 +189,9 @@ public class RouletteSerial {
             //Update settings for hit function of Drum Class
             if(value == 1){
                 !settings[moduleNum] => settings[moduleNum];
+                <<<"button hit">>>;
                 buttonPressed.signal();
+                
             }
         }
         if(moduleNum == 16 && value == 1){
@@ -203,50 +214,46 @@ public class RouletteSerial {
         }
     }
     
-    int encoderDrum;
-    int encoderCount;
-    int encoderVal[2];
-    int encTimerOn;
-    //Sporked to monitor changes in encoder between 2 and 0
+    
+    //monitor changes in encoder between 2 and 1
     fun void encoderPing(){
-        while (true){
-            serialNotify => now;
-            
-            if(partType == 4) {
-                if (moduleNum == 0){
-                    if (encTimerOn == 0) spork~ encoderTimer(1);
-                    
-                    value => encoderVal[0];
-                    
-                    if (value == 2){ 
-                        if (encoderVal[0] != encoderVal[1]) 0 => encoderCount;
-                        encoderCount++;
-                    }
-                    if (value == 1) {
-                        if (encoderVal[0] != encoderVal[1]) 0 => encoderCount;
-                        encoderCount--;
-                    }
-                    value => encoderVal[1];
+        
+        if(partType == 4) {
+            if (moduleNum == 0){
+                if (encTimerOn == 0) spork~ encoderTimer(2);
+                
+                value => encoderVal[0];
+                
+                if (value == 2){ 
+                    if (encoderVal[0] != encoderVal[1]) 0 => encoderCount;
+                    encoderCount++;
                 }
-                else if (moduleNum == 1) {
-                    //If moduleNum == 1, assign it to Tempo
-                    Std.clamp(Std.scalef(value$float,0,255,minTempo,maxTempo+2)$int,minTempo,maxTempo) => encoderTempo => encoder[1];
-                    tempoChange.signal();
+                if (value == 1) {
+                    if (encoderVal[0] != encoderVal[1]) 0 => encoderCount;
+                    encoderCount--;
                 }
+                value => encoderVal[1];
             }
-            //<<<"Encoder Counter: ", Std.abs(encoderCount)>>>;
+            else if (moduleNum == 1) {
+                //If moduleNum == 1, assign it to Tempo
+                Std.clamp(Std.scalef(value$float,0,255,minTempo,maxTempo+2)$int,minTempo,maxTempo) => encoderTempo => encoder[1];
+                tempoChange.signal();
+            }
         }
+        //<<<"Encoder Counter: ", Std.abs(encoderCount)>>>;
     }
+    
+    dur encTimer;
     
     fun void encoderTimer(int timer) {
         1 => encTimerOn;
-        timer::second => now;
+        timer::second => encTimer;
+        encTimer => now;
         <<<"Encoder timer reset">>>;
         0 => encoderCount;
         0 => encTimerOn;
     }
     
-    5 => int turnCount;
     fun void updateEncoder(){
         //If moduleNum == 0, assign it to represent the drum picker
         if(moduleNum == 0){
