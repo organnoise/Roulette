@@ -2,6 +2,11 @@ public class Drum {
     Preset preset;
     BPM bpm;
     OSC osc;
+    MidiOut mout;
+    
+    int port;
+    int noteNum;
+    mout.open(port);
     
     80 => bpm.tempo;
     bpm.measure();
@@ -13,8 +18,6 @@ public class Drum {
     SndBuf inst;
     
     int seq[16][4];
-    
-    float offsetPercent;
     
     //seq: [probability, vol low, vol high, time offset]
     
@@ -31,7 +34,7 @@ public class Drum {
     spork~ appIn();
     1 => int playState;
     int saveState;
-    float offset;
+    .1 => float offset;
     
     //Play 
     //calculates with determine, then launches  
@@ -50,7 +53,7 @@ public class Drum {
                 }
             }
             //If not playing pass arbitrary time to avoid crashing
-            else 10 :: ms => now;
+            else 1 :: ms => now;
         }
         
     }
@@ -74,22 +77,21 @@ public class Drum {
         
         seq[stepNumber][3] => float hitPoint;
         
-        bpm.sth/2 * offset => now;
+        //Std.clampf(offset, 0.01, 1) => offset;
+        if(offset == 0) 0.01 => offset;
+        
+        (bpm.sth * (1 - offset))/2 => now;
         
         //"launch point" is used as a strange solution to allow the 
         // time displacement effect
-        for(launchPoint => int i; i < 10; i ++){
+        for(launchPoint => int i; i < 9; i ++){
             //If a hit occurs...
             if(hitPoint == i){
                 hit(stepNumber);
             }
-            //For visual purposes make the clock light
-            //slightly early
-            if(i == 3){
-                //osc.oscOut("/clockOn", stepNumber);
-            }
-            bpm.sth/10 => now;
+            (bpm.sth * offset)/9 => now;
         }
+        (bpm.sth * (1 - offset))/2 => now;
     }
     
     //Determine
@@ -107,7 +109,7 @@ public class Drum {
             Std.itoa(settings[i][1]$int) +=> value;
             if(i < seq.size()-1) "," +=> value;
         }
-        osc.oscOut("/"+ name + "/hit", value);
+        //osc.oscOut("/"+ name + "/hit", value);
         determiner.signal();
         
     }
@@ -116,15 +118,33 @@ public class Drum {
     fun void determine(){
         
         string value;
-        osc.oscOut("/"+ name + "/determine", 1);
+        //osc.oscOut("/"+ name + "/determine", 1);
         
         //Send a comma separated string as OSC message
         for(0 => int i; i < seq.size(); i++){
             Std.itoa(settings[i][1]$int) +=> value;
             if(i < seq.size()-1) "," +=> value;
         }
-        osc.oscOut("/"+ name + "/hit", value);
+        //osc.oscOut("/"+ name + "/hit", value);
         determiner.signal();
+    }
+    
+    //Midi Set
+    fun void setMidi(int _port, int _noteNum){
+        _port => port;
+        mout.open(port);
+        _noteNum => noteNum;
+    }
+    
+    //Midi send
+    fun void noteOn(int control, int note, int vel){
+        MidiMsg msg;
+        
+        if (control == 1) 0x90 => msg.data1;
+        else 0x80 => msg.data1;
+        note => msg.data2;
+        vel => msg.data3;
+        mout.send(msg);  
     }
     
     //Hit
@@ -139,6 +159,8 @@ public class Drum {
             settings[stepNumber][0] => inst.gain;
             //<<<name, " ", stepNumber, " ", inst.gain() >>>;
             0 => inst.pos;
+            noteOn(1, noteNum, (inst.gain() * 127)$int);
+            noteOn(0, noteNum, (inst.gain() * 127)$int);
         }
         // <<<"CHECK AGAIN ", stepNumber>>>;
         check(stepNumber);
@@ -146,7 +168,7 @@ public class Drum {
         stepNumber => value[0];
         settings[stepNumber][1]$int => value[1];
         //Send the value of the step hitting
-        osc.oscOut("/"+ name + "/soloHit", value);
+        //osc.oscOut("/"+ name + "/soloHit", value);
         //Allow processing to create a new table of comparison
         //see the KickPing[] array in hitUpdate()
         //oscOut("/"+ name + "/determine", 1);
@@ -218,6 +240,8 @@ public class Drum {
         osc.oin.addAddress( "/play, i" );
         osc.oin.addAddress( "/save, i" );
         osc.oin.addAddress( "/timeOffset, f" );
+        osc.oin.addAddress( "/" + name + "/load, i" );
+        
         while ( true )
         {
             // wait for event to arrive
@@ -244,6 +268,12 @@ public class Drum {
                 }
                 //Offset Percentage
                 if(osc.msg.address == "/timeOffset") osc.msg.getFloat(0) => offset;
+                
+                if(osc.msg.address == "/" + name + "/load") {
+                    if(osc.msg.getInt() == 1){
+                        osc.oscOut("/loadList", preset.getPresets());
+                    }
+                }
             }
         }
     }

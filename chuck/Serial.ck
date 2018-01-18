@@ -1,6 +1,7 @@
 public class RouletteSerial {
     // open cereal device
     SerialIO cereal;
+    OSC osc;
     
     int bytes[];
     string line;
@@ -142,6 +143,8 @@ public class RouletteSerial {
             
             sort();
             encoderPing();
+            
+            
             // If 0, it is a pot for probability
             if(partType == 0) updatePot();
             // If 2, its X
@@ -201,7 +204,7 @@ public class RouletteSerial {
     }
     fun void updateX(){
         //If 2, its X of joystick for slugging
-        Std.clamp(Std.scalef(value$float,21,105,0,10)$int,0,9) => seq[moduleNum][3];
+        Std.clamp(Std.scalef(value$float,21,105,0,10)$int,0,8) => seq[moduleNum][3];
     }
     
     fun void updateY(){

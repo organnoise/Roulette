@@ -1,7 +1,7 @@
 public class OSC {
     
     OscOut osc;
-    osc.dest("localhost", 54322);
+    osc.dest("10.15.42.159", 54322);
     // create our OSC receiver
     OscIn oin;
     OscMsg msg;
@@ -30,5 +30,12 @@ public class OSC {
         osc.send();
     }
     
+    fun void oscOut(string addr, string val[]) {
+        osc.start(addr);
+        for(0 => int i; i < val.size(); i++){
+            osc.add(val[i]);
+        }
+        osc.send();
+    }
     
 }

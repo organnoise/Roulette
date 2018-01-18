@@ -101,6 +101,48 @@ public class Preset {
         cherr <= printStatus() <= "\n";
     }
     
+    
+    //Collect all the names of the presets into an array
+    fun string[] getPresets(){
+        
+        "./presets/" + name + "/" => string dir;
+        ".presetList.txt" => string filename;
+        
+        //Ls filenames and save to file
+        Std.system("ls " + dir + " > " + dir + filename);
+        
+        // open for reading
+        fio.open( me.sourceDir() + "presets/" + name + "/" + filename, FileIO.READ );
+        
+        // ensure it's ok
+        if( !fio.good() )
+        {
+            cherr <= "can't open file: " <= filename <= " for reading..."
+            <= IO.newline();
+            me.exit();
+        }
+        
+        
+        int i;
+        string presetName;
+        //Dynamic array not working
+        string names[1000];
+        
+        //For each line add that string to names[]
+        while (fio => presetName){
+            presetName <= IO.newline();
+            presetName => names[i];
+            //<<< presetName >>>;
+            i++;
+        }
+        //Resize array after collecting names
+        i => names.size;
+        
+        //Delete temp file
+        Std.system("rm " + dir + filename);
+        return names;
+    }
+    
     //save a preset by passing a two-dimensional array to it
     fun void save(int seq[][]){
         countPresets() => presetCount;

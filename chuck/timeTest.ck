@@ -3,19 +3,18 @@
 
 
 fun void timer(){
-    <<<"start ", x/second>>>;
-    x => now;
-    <<<"done ", x/second>>>;
+    while (true){
+        1.0/3.0 => float x;
+        x::second => now;
+        <<<x>>>;
+    }
 }
 
 spork~ timer();
 
 int i;
 while(true){
-    i++;
+    1::second => now;
+    <<< "1 second" >>>;
     
-    //i :: second => x;
-    <<< x /second >>>;
-    .125::second => now;
-    
-    }
+}

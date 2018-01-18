@@ -20,13 +20,17 @@ bpm.measure();
 serial.setup(2);
 spork~ serial.loop(0);
 
-kick.inst => dac;
-snare.inst => dac;
-hihat.inst => dac;
+//kick.inst => dac;
+//snare.inst => dac;
+//hihat.inst => dac;
 
 kick.load("kick","/HipHop/HIP_kick_9.wav");
 snare.load("snare","/HipHop/HIP_Snare_8.wav");
 hihat.load("hihat","/HipHop/HIP_Hat_4.wav");
+
+for(int i; i < drum.cap(); i++){
+    drum[i].setMidi(0, 60 + i);
+}
 
 spork~ setButtonStateInit();
 
@@ -39,12 +43,12 @@ spork~ drumChange();
 spork~ tempoChange();
 
 spork~ clock.play();
-spork~ kick.play(0.5);
-spork~ snare.play(0.8);
-spork~ hihat.play(0.08);
+spork~ kick.play(1);
+spork~ snare.play(1);
+spork~ hihat.play(1);
 
 spork~ appIn();
-spork~ dataOut();
+//spork~ dataOut();
 
 while(true){
     bpm.measure();
@@ -60,10 +64,11 @@ fun void dataOut(){
             osc.oscOut("/modNum", serial.moduleNum);
             osc.oscOut("/prob", drum[currentDrum].seq[serial.moduleNum][0]);
             osc.oscOut("/timeOffset", drum[currentDrum].seq[serial.moduleNum][3]);
+            osc.oscOut("/vol", drum[currentDrum].seq[serial.moduleNum][1]);
         }
-                
-        }
+        
     }
+}
 
 fun void clockCheck(){
     while(true){
