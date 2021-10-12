@@ -12,15 +12,19 @@ public class Preset {
     //save(seq);
     //load(2);
     
-    fun void load(int presetNum){
+    fun int[][] load(int presetNum){
         
-        cherr <= "Loading preset_" <= presetNum <= " ...\n";
+        string names[];
+        
+        getPresets() @=> names;
+        
+        cherr <= "Loading " <= names[presetNum] <= " ...\n";
         cherr <= "Current:\n";
         
         cherr <= printStatus() <= "\n";
         
         // default file
-        me.sourceDir() + "/presets/" + name +"/preset_" + Std.itoa(presetNum) + ".txt"=> string filename;
+        me.sourceDir() + "/presets/" + name +"/" + names[presetNum]=> string filename;
         
         // open a file
         fio.open( filename, FileIO.READ );
@@ -52,12 +56,14 @@ public class Preset {
             if(i % 4 == 3 && i != vals.size()) j++;
         }
         
-        cherr <= "Loaded: preset_" <= Std.itoa(presetNum) <= ".txt";
+        cherr <= "Loaded: " <= names[presetNum] <= " ...\n";
         cherr <= printStatus() <= "\n";
+        
+        return seq;
     }
     
     //load by specific filename
-    fun void load(string presetName){
+    fun int[][] load(string presetName){
         
         cherr <= "Loading preset_" <= presetName <= ".txt ...\n";
         cherr <= "Current:\n";
@@ -99,6 +105,8 @@ public class Preset {
         
         cherr <= "Loaded:" <= presetName <= ".txt\n";
         cherr <= printStatus() <= "\n";
+        
+        return seq;
     }
     
     

@@ -10,6 +10,7 @@ public class Drum {
     
     80 => bpm.tempo;
     bpm.measure();
+    0.5 => float swing;
     
     //OSC tools
     string name;
@@ -31,10 +32,17 @@ public class Drum {
     float instGain;
     0 => int launch;
     
-    spork~ appIn();
+    
     1 => int playState;
     int saveState;
     .1 => float offset;
+    
+    
+    osc.oin.addAddress( "/play, i" );
+    osc.oin.addAddress( "/save, i" );
+    //osc.oin.addAddress( "/clear, i" );
+    osc.oin.addAddress( "/load, i" );
+    osc.oin.addAddress( "/timeOffset, f" );
     
     //Play 
     //calculates with determine, then launches  
@@ -43,6 +51,10 @@ public class Drum {
         
         _instGain => instGain;
         determineInit();
+        
+        
+        
+        spork~ appIn();
         while (true){
             
             if (playState == 1){
@@ -52,8 +64,8 @@ public class Drum {
                     if (playState == 0) break;
                 }
             }
-            //If not playing pass arbitrary time to avoid crashing
-            else 1 :: ms => now;
+            //If not playing pass the shortest amount of time
+            else 1 :: samp => now;
         }
         
     }
@@ -70,18 +82,22 @@ public class Drum {
     }
     
     //Step
-    
+    0.99 => swing;
+    dur stepTime;
     //essentially this is micro sequencing
     //that allows the "Slugging" timing effect
     fun void step(int stepNumber, int launchPoint){
         
         seq[stepNumber][3] => float hitPoint;
         
-        //Std.clampf(offset, 0.01, 1) => offset;
+        //Swing multiplier to normal sth note
+        bpm.sth => stepTime;
+        
         if(offset == 0) 0.01 => offset;
+        //(stepTime * (1 - offset)) / 2 => dur offsetTime;
+        (stepTime * (1 - offset)) => dur offsetTime;
         
-        (bpm.sth * (1 - offset))/2 => now;
-        
+        offsetTime * calcSwing(stepNumber) => now;
         //"launch point" is used as a strange solution to allow the 
         // time displacement effect
         for(launchPoint => int i; i < 9; i ++){
@@ -89,9 +105,26 @@ public class Drum {
             if(hitPoint == i){
                 hit(stepNumber);
             }
-            (bpm.sth * offset)/9 => now;
+            (stepTime * offset)/9 => now;
+            
         }
-        (bpm.sth * (1 - offset))/2 => now;
+        offsetTime * (1 - calcSwing(stepNumber)) => now;
+    }
+    
+    //Calculate the swing based on the stepNumber
+    fun float calcSwing(int stepNumber){
+        float swingPercent;
+        
+        if (swing == 0.0) 0.01 => swing;
+        
+        if (stepNumber % 2 == 0) {
+            .5 => swingPercent;
+        }
+        if (stepNumber % 2 == 1) {
+            swing => swingPercent;
+        }
+        //<<<"Calc Swing", name, swingPercent, stepNumber >>>;
+        return swingPercent;
     }
     
     //Determine
@@ -99,33 +132,15 @@ public class Drum {
     fun void determineInit(){
         //<<<"Determine">>>;
         determine();
-        string value;
         for(0 => int i; i < seq.size(); i++){
             check(i);
             instGain => settings[i][0];
         }
-        //Send a comma separated string as OSC message
-        for(0 => int i; i < seq.size(); i++){
-            Std.itoa(settings[i][1]$int) +=> value;
-            if(i < seq.size()-1) "," +=> value;
-        }
-        //osc.oscOut("/"+ name + "/hit", value);
         determiner.signal();
-        
     }
     
     //I use this determine msg a couple times
-    fun void determine(){
-        
-        string value;
-        //osc.oscOut("/"+ name + "/determine", 1);
-        
-        //Send a comma separated string as OSC message
-        for(0 => int i; i < seq.size(); i++){
-            Std.itoa(settings[i][1]$int) +=> value;
-            if(i < seq.size()-1) "," +=> value;
-        }
-        //osc.oscOut("/"+ name + "/hit", value);
+    fun void determine(){     
         determiner.signal();
     }
     
@@ -219,6 +234,15 @@ public class Drum {
         
     }
     
+    //Clear
+    fun void clear(){
+        [[0,100,100,4],[0,70,80,4],[0,70,80,4],[0,70,80,4],
+        [0,70,80,4],[0,70,80,4],[0,70,80,4],[0,70,80,4],
+        [0,70,80,4],[0,70,80,4],[0,70,80,4],[0,70,80,4],
+        [0,70,80,4],[0,70,80,4],[0,70,80,4],[0,70,80,4]] @=> seq;  
+        <<< name, "cleared">>>;
+    }
+    
     //Load Buffer
     fun string load ( string _name, string filename ){
         me.dir() + "/audio/" + filename => inst.read;
@@ -237,11 +261,6 @@ public class Drum {
     fun void appIn(){
         // infinite event loop
         // create an address in the receiver
-        osc.oin.addAddress( "/play, i" );
-        osc.oin.addAddress( "/save, i" );
-        osc.oin.addAddress( "/timeOffset, f" );
-        osc.oin.addAddress( "/" + name + "/load, i" );
-        
         while ( true )
         {
             // wait for event to arrive
@@ -259,20 +278,23 @@ public class Drum {
                     if (playState == 0) 0 => launch;
                 }
                 //Preset Saving
-                if(osc.msg.address == "/save"){
+                else if(osc.msg.address == "/save"){
                     //trigger save state
                     if(osc.msg.getInt(0) == 1) {
                         preset.save(seq);
                         <<<"Preset saved to: ", name >>>;
                     }
                 }
-                //Offset Percentage
-                if(osc.msg.address == "/timeOffset") osc.msg.getFloat(0) => offset;
-                
-                if(osc.msg.address == "/" + name + "/load") {
-                    if(osc.msg.getInt() == 1){
-                        osc.oscOut("/loadList", preset.getPresets());
-                    }
+                //Loading
+                else if(osc.msg.address == "/load"){
+                    preset.load(osc.msg.getInt(0)) @=> seq;
+                    determineInit();
+                    <<< name, "loaded">>>; 
+                }
+                //Set offset
+                else if(osc.msg.address == "/timeOffset"){
+                    osc.msg.getFloat(0) => offset;
+                    //<<<name, osc.msg.getFloat(0)>>>;  
                 }
             }
         }

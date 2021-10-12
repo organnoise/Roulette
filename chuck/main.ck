@@ -17,7 +17,7 @@ int currentDrum;
 bpm.measure();
 
 
-serial.setup(2);
+serial.setup(1);
 spork~ serial.loop(0);
 
 //kick.inst => dac;
@@ -46,6 +46,11 @@ spork~ clock.play();
 spork~ kick.play(1);
 spork~ snare.play(1);
 spork~ hihat.play(1);
+
+//Notify app of current info
+osc.oscOut("/drum", drum[currentDrum].name);
+osc.oscOut("/loadList", drum[currentDrum].preset.getPresets());
+osc.oscOut("/bpm", bpm.tempo);
 
 spork~ appIn();
 //spork~ dataOut();
@@ -133,7 +138,8 @@ fun void drumChange(){
         osc.oscOut("/drum", drum[currentDrum].name);
         for(0 => int i; i < 16; i++){
             serial.send(0,i,drum[currentDrum].settings[i][1]$int);
-        }    
+        }
+        osc.oscOut("/loadList", drum[currentDrum].preset.getPresets());    
     }
 }
 
@@ -148,6 +154,8 @@ fun void appIn(){
     // infinite event loop
     // create an address in the receiver
     osc.oin.addAddress( "/tempo, i" );
+    osc.oin.addAddress( "/clear, i" );
+    osc.oin.addAddress( "/swing, f" );
     while ( true )
     {
         // wait for event to arrive
@@ -161,6 +169,21 @@ fun void appIn(){
                 <<< "OSC tempo: ", osc.msg.getInt(0) >>>;
                 Std.clamp(osc.msg.getInt(0), 1, 200) => bpm.tempo => serial.encoderTempo;
                 bpm.measure();
+            }
+            
+            if(osc.msg.address == "/clear" && osc.msg.getInt(0) == 1){
+                for(int i; i < drum.size() ; i++){
+                    drum[i].clear();
+                }
+            }
+            
+            if(osc.msg.address == "/swing"){
+                osc.msg.getFloat(0) => float swing;
+                if(swing == 0) 0.01 => swing;
+                <<<"OSC Swing: ", swing >>>;
+                for(int i; i < drum.size() ; i++){
+                    swing => drum[i].swing;
+                }
             }
         }
     }

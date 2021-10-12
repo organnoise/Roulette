@@ -1,11 +1,17 @@
 public class OSC {
     
+    
     OscOut osc;
-    osc.dest("10.15.42.159", 54322);
+    string ip;
+    
+    //"192.168.1.95" => ip;
+    osc.dest("localhost", 54322);
+    //osc.dest(ip, 54322);
     // create our OSC receiver
     OscIn oin;
     OscMsg msg;
     54321 => oin.port;
+    
     
     
     // osc sending function

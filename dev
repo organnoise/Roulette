@@ -1,0 +1,12 @@
+#! /bin/bash
+
+
+open /Applications/PurrData.app
+
+sleep 2
+
+open ./MobMuPlat/PdWrapper.pd
+open ./MobMuPlat/Roulette.mmp
+open ./MobMuPlat/Roulette.pd
+
+open ./chuck/Drum.ck
